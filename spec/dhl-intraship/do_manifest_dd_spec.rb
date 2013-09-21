@@ -31,18 +31,18 @@ ERROR_MANIFEST_RESPONSE = <<EOS
 EOS
 
 MANIFEST_RESPONSE = <<EOS
-    <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
-    <soapenv:Body>
-    <ns4:DoManifestResponse xmlns:ns4="http://de.ws.intraship">
-    <Version xmlns="http://dhl.de/webservice/cisbase">
-    <majorRelease>1</majorRelease>
+<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+   <soapenv:Body>
+      <ns4:DoManifestResponse xmlns:ns4="http://de.ws.intraship">
+         <Version xmlns="http://dhl.de/webservice/cisbase">
+            <majorRelease>1</majorRelease>
             <minorRelease>0</minorRelease>
-    <build>14</build>
+            <build>14</build>
          </Version>
-    <Status>
-    <StatusCode>0</StatusCode>
+         <Status>
+            <StatusCode>0</StatusCode>
             <StatusMessage>ok</StatusMessage>
-    </Status>
+         </Status>
          <ManifestState>
             <ShipmentNumber>
                <ns1:shipmentNumber xmlns:ns1="http://dhl.de/webservice/cisbase">123</ns1:shipmentNumber>
@@ -64,15 +64,15 @@ EOS
         @api = API.new(config, options)
       end
 
+      it "should raise an exception on a failed manifestation call" do
+        savon.expects(:do_manifest_dd).with(message: :any).returns( code: 200, headers: {}, body: ERROR_MANIFEST_RESPONSE )
 
-      it "should raise an exception on a failed call" do
-        savon.expects("de:DoManifestDDRequest").returns( code: 200, headers: {},body: ERROR_MANIFEST_RESPONSE )
-
-        expect { @api.doManifestDD("123") }.should raise_error
+        expect { @api.doManifestDD("123") }.to raise_error
       end
 
-      it "should return true on successful call" do
-        savon.expects("de:DoManifestDDRequest").returns( code: 200, headers: {},body: MANIFEST_RESPONSE )
+      it "should return true on successful manifestation call" do
+        savon.expects(:do_manifest_dd).with(message: :any).returns( code: 200, headers: {}, body: MANIFEST_RESPONSE )
+
         @api.doManifestDD("123").should be_true
       end
     end

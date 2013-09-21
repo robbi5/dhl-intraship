@@ -50,10 +50,10 @@ EOS
         @booking_information = BookingInformation.new(pickup_date: Date.today, ready_by_time: '10:00', closing_time: '14:00')
       end
 
-      it "should raise an exception on a failed call" do
-        savon.expects("de:BookPickupRequest").returns( code: 200, headers: {},body: ERROR_PICKUP_RESPONSE )
+      it "should raise an exception on a failed bookPickup call" do
+        savon.expects(:book_pickup).with(message: :any).returns( code: 200, headers: {}, body: ERROR_PICKUP_RESPONSE )
 
-        expect { @api.bookPickup(@booking_information, CompanyAddress.new) }.should raise_error
+        expect { @api.bookPickup(@booking_information, CompanyAddress.new) }.to raise_error
       end
 
     end

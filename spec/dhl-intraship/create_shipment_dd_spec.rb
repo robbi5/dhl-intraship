@@ -43,14 +43,14 @@ EOS
       end
 
       it "should create an API call" do
-        savon.expects("de:CreateShipmentDDRequest" ).returns( code: 200, headers: {},body: CREATE_RESPONSE )
+        savon.expects(:create_shipment_dd).with(message: :any).returns( code: 200, headers: {}, body: CREATE_RESPONSE )
 
         shipment = Shipment.new(shipment_date: Date.today + 1)
 
         sender = CompanyAddress.new
         receiver = PersonAddress.new
-        shipment.receiver_address=receiver
-        shipment.sender_address=sender
+        shipment.receiver_address = receiver
+        shipment.sender_address = sender
 
         @api.createShipmentDD(shipment).should_not be_nil
       end

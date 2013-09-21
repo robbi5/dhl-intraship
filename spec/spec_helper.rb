@@ -1,4 +1,5 @@
-require 'savon/spec'
+require "savon"
+require "savon/mock/spec_helper"
 
 Dir[File.join(File.dirname(__FILE__), '../lib/dhl-intraship/*.rb')].each { |f| require f }
 
@@ -6,5 +7,7 @@ Dir[File.join(File.dirname(__FILE__), '../lib/dhl-intraship/*.rb')].each { |f| r
 HTTPI.log = false
 
 RSpec.configure do |config|
-  config.include Savon::Spec::Macros
+  config.include Savon::SpecHelper
+  config.before(:all) { savon.mock!   }
+  config.after(:all)  { savon.unmock! }
 end

@@ -63,15 +63,15 @@ EOS
       end
 
       it "should raise an exception on a failed call" do
-        savon.expects("de:DeleteShipmentDDRequest").returns( code: 200, headers: {},body: ERROR_DELETE_RESPONSE )
+        savon.expects(:delete_shipment_dd).with(message: :any).returns( code: 200, headers: {}, body: ERROR_DELETE_RESPONSE )
 
-        expect { @api.deleteShipmentDD("123") }.should raise_error
+        expect { @api.deleteShipmentDD("123") }.to raise_error
       end
 
       it "should return true on successful call" do
-        savon.expects("de:DeleteShipmentDDRequest").returns( code: 200, headers: {},body: DELETE_RESPONSE )
+        savon.expects(:delete_shipment_dd).with(message: :any).returns( code: 200, headers: {}, body: DELETE_RESPONSE )
 
-	@api.deleteShipmentDD("123").should be_true
+        @api.deleteShipmentDD("123").should be_true
       end
     end
 
