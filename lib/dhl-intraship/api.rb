@@ -5,10 +5,9 @@ module Dhl
     class API
 
       DEFAULT_NAMESPACES = {
-          "xmlns:soapenv" => "http://schemas.xmlsoap.org/soap/envelope/",
-          "xmlns:de" => "http://de.ws.intraship",
-          "xmlns:is" => "http://dhl.de/webservice/is_base_de",
-          "xmlns:cis" => "http://dhl.de/webservice/cisbase"}
+        "xmlns:is" => "http://de.ws.intraship",
+        "xmlns:cis" => "http://dhl.de/webservice/cisbase"
+      }
 
       INTRASHIP_WSDL = "http://www.intraship.de/ws/1_0/ISService/DE.wsdl"
       INTRASHIP_ENDPOINT = "http://www.intraship.de/ws/1_0/de/ISService"
@@ -35,43 +34,35 @@ module Dhl
         @partner_id = config[:partner_id] || '01'
 
         @options = options
-        @client = ::Savon::Client.new do
-          wsdl.document = wsdl_url
-          wsdl.endpoint = endpoint
-        end
+        @client = ::Savon::Client.new(
+          wsdl: wsdl_url,
+          endpoint: endpoint,
+          namespaces: DEFAULT_NAMESPACES,
+          soap_header: authentification_header,
+          pretty_print_xml: true,
+          log_level: :debug
+        )
       end
 
       def createShipmentDD(shipments)
         begin
           shipments = [shipments] unless shipments.respond_to?('each')
 
-          # For some reason the class instance variables are not accessible inside of the request block
-          ekp = @ekp
-          partner_id = @partner_id
-
           returnXML = @config && @config[:label_response_type] && @config[:label_response_type] == :xml;
-          result = @client.request "de:CreateShipmentDDRequest" do
-            soap.xml do |xml|
-              xml.soapenv(:Envelope, DEFAULT_NAMESPACES) do |xml|
-                xml.soapenv(:Header) do |xml|
-                  append_default_header_to_xml(xml)
-                end
-                xml.soapenv(:Body) do |xml|
-                  xml.de(:"CreateShipmentDDRequest") do |xml|
-                    add_version_information(xml)
-                    xml.ShipmentOrder do |xml|
-                      xml.SequenceNumber('1')
-                      shipments.each do |shipment|
-                        shipment.append_to_xml(ekp, partner_id, xml)
-                        xml.LabelResponseType('XML') if returnXML
-                      end
-                    end
-                  end
-                end
-              end
+
+          xml = Builder::XmlMarkup.new
+          add_version_information(xml)
+          xml.ShipmentOrder do |xml|
+            xml.SequenceNumber('1')
+            shipments.each do |shipment|
+              shipment.append_to_xml(@ekp, @partner_id, xml)
+              xml.LabelResponseType('XML') if returnXML
             end
           end
-          r = result.to_hash[:create_shipment_response]
+
+          result = @client.call(:create_shipment_dd, message: xml.target!)
+
+          r = result.body[:create_shipment_response]
           if r[:status][:status_code] == '0'
             shipment_number = r[:creation_state][:shipment_number][:shipment_number]
 
@@ -93,8 +84,8 @@ module Dhl
 
       def deleteShipmentDD(shipment_number)
         begin
-          result = do_simple_shipment_number_only_request('DeleteShipmentDDRequest', shipment_number)
-          r = result.to_hash[:delete_shipment_response]
+          result = do_simple_shipment_number_only_request(:delete_shipment_dd, shipment_number)
+          r = result.body[:delete_shipment_response]
 
           # Return true if successful
           raise "Intraship call failed with code #{r[:status][:status_code]}: #{r[:status][:status_message]} (Status messages: #{r[:deletion_state][:status].to_s})" unless r[:status][:status_code] == '0'
@@ -107,8 +98,8 @@ module Dhl
 
       def doManifestDD(shipment_number)
         begin
-          result = do_simple_shipment_number_only_request('DoManifestDDRequest', shipment_number)
-          r = result.to_hash[:do_manifest_response]
+          result = do_simple_shipment_number_only_request(:do_manifest_dd, shipment_number)
+          r = result.body[:do_manifest_response]
 
           raise "Intraship call failed with code #{r[:status][:status_code]}: #{r[:status][:status_message]} (Status messages: #{r[:manifest_state][:status].to_s})" unless r[:status][:status_code] == '0'
 
@@ -125,7 +116,7 @@ module Dhl
         raise "Pickup_address must be of type Address! Is #{pickup_address.class}" unless pickup_address.kind_of? Address
         raise "Contact orderer must be of type Address! Is #{contact_orderer.class}" unless contact_orderer.nil? or contact_orderer.kind_of? Address
 
-        if booking_information.account.nil? and [:DDI, :DDN].includes?(booking_information.product_id)
+        if booking_information.account.nil? and [:DDI, :DDN].include?(booking_information.product_id)
           booking_information.account = @ekp
         end
         if booking_information.attendance.nil?
@@ -133,28 +124,18 @@ module Dhl
         end
 
         begin
-          result = @client.request "de:BookPickupRequest" do
-            soap.xml do |xml|
-              xml.soapenv(:Envelope, DEFAULT_NAMESPACES) do |xml|
-                xml.soapenv(:Header) do |xml|
-                  append_default_header_to_xml(xml)
-                end
-                xml.soapenv(:Body) do |xml|
-                  xml.de(:"BookPickupRequest") do |xml|
-                    add_version_information(xml)
-                    booking_information.append_to_xml(xml)
-                    xml.PickupAddress do |xml|
-                      pickup_address.append_to_xml(xml)
-                    end
-                    xml.ContactOrderer do |xml|
-                      contact_orderer.append_to_xml(xml)
-                    end unless contact_orderer.nil?
-                  end
-                end
-              end
-            end
+          xml = Builder::XmlMarkup.new
+          add_version_information(xml)
+          booking_information.append_to_xml(xml)
+          xml.PickupAddress do |xml|
+            pickup_address.append_to_xml(xml)
           end
-          r = result.to_hash[:book_pickup_response]
+          xml.ContactOrderer do |xml|
+            contact_orderer.append_to_xml(xml)
+          end unless contact_orderer.nil?
+
+          result = @client.call(:book_pickup, message: xml.target!)
+          r = result.body[:book_pickup_response]
 
           raise "Intraship call failed with code #{r[:status][:status_code]}: #{r[:status][:status_message]}" unless r[:status][:status_code] == '0'
 
@@ -166,20 +147,15 @@ module Dhl
 
       protected
 
-        def append_default_header_to_xml(xml)
-          # For some reason the class instance variables are not accessible inside of the request block
-          user = @user
-          signature = @signature
-          ekp = @ekp
-          procedure_id = @procedure_id
-          partner_id = @partner_id
-
-          xml.cis(:Authentification) do |xml|
-            xml.cis(:user, user)
-            xml.cis(:signature, signature)
-            xml.cis(:accountNumber, "#{ekp}|#{procedure_id}|#{partner_id}")
-            xml.cis(:type, '0')
-          end
+        def authentification_header
+          {
+            "cis:Authentification" => {
+              "cis:user" => @user,
+              "cis:signature" => @signature,
+              # "cis:accountNumber" => "#{@ekp}|#{@procedure_id}|#{@partner_id}", # deprecated
+              "cis:type" => 0
+            }
+          }
         end
 
         def add_version_information(xml)
@@ -189,24 +165,14 @@ module Dhl
           end
         end
 
-        def do_simple_shipment_number_only_request(request_name, shipment_number)
-          @client.request "de:#{request_name}" do
-            soap.xml do |xml|
-              xml.soapenv(:Envelope, DEFAULT_NAMESPACES) do |xml|
-                xml.soapenv(:Header) do |xml|
-                  append_default_header_to_xml(xml)
-                end
-                xml.soapenv(:Body) do |xml|
-                  xml.de(request_name.to_sym) do |xml|
-                    add_version_information(xml)
-                    xml.ShipmentNumber do |xml|
-                      xml.cis(:shipmentNumber, shipment_number)
-                    end
-                  end
-                end
-              end
-            end
+        def do_simple_shipment_number_only_request(operation, shipment_number)
+          xml = Builder::XmlMarkup.new
+          add_version_information(xml)
+          xml.ShipmentNumber do |xml|
+            xml.cis(:shipmentNumber, shipment_number)
           end
+
+          @client.call(operation, message: xml.target!)
         end
     end
   end
